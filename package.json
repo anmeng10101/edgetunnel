@@ -1,0 +1,16 @@
+{
+  "name": "edgetunnel",
+  "version": "2.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/worker.ts --bundle --minify --legal-comments=none --loader:.html=text --outfile=dist/_worker.js --format=esm --target=esnext --platform=neutral --external:cloudflare:sockets",
+    "typecheck": "tsc --noEmit",
+    "deploy": "npm run build && npx wrangler pages deploy dist --project-name tunnel --branch develop"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260509.1",
+    "esbuild": "^0.24.0",
+    "typescript": "^6.0.3"
+  }
+}
