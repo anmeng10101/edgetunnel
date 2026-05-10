@@ -4,6 +4,7 @@ import { normalizeToArray } from '../utils/normalization.js';
 
 const PROXYIP_KEY = "PROXYIP";
 const PATH_PLACEHOLDER = '{{IP:PORT}}';
+const DEFAULT_AUTO_PROXYIP = 'pyip.ygkkk.dpdns.org';
 
 export async function readConfigJSON(env, hostname, userID, {
 	userAgent = "Mozilla/5.0",
@@ -18,7 +19,7 @@ export async function readConfigJSON(env, hostname, userID, {
 	try {
 		const configText = await env.KV.get('config.json');
 		if (!configText || resetConfig === true) {
-			await env.KV.put('config.json', JSON.stringify(defaultConfigJSON, null, 2));
+			await env.KV.put('config.json', JSON.stringify(cleanConfigForStorage(defaultConfigJSON), null, 2));
 			configJSON = defaultConfigJSON;
 		} else {
 			configJSON = mergeConfigDefaults(defaultConfigJSON, JSON.parse(configText));
@@ -40,15 +41,11 @@ export function cleanConfigForStorage(config) {
 	const reverseProxySOCKS5 = reverseProxy.SOCKS5 || {};
 	const pathTemplate = reverseProxy.pathTemplate || {};
 	return {
-		TIME: config.TIME,
-		HOST: config.HOST,
 		HOSTS: Array.isArray(config.HOSTS) ? config.HOSTS : [],
-		UUID: config.UUID,
 		PATH: config.PATH,
 		protocolType: config.protocolType,
 		transportProtocol: config.transportProtocol,
 		gRPCmode: config.gRPCmode,
-		gRPCUserAgent: config.gRPCUserAgent,
 		skipCertVerify: config.skipCertVerify,
 		enable0RTT: config.enable0RTT,
 		tlsFragment: config.tlsFragment,
@@ -68,7 +65,6 @@ export function cleanConfigForStorage(config) {
 			SUB: preferredSubGen.SUB,
 			SUBNAME: preferredSubGen.SUBNAME,
 			SUBUpdateTime: preferredSubGen.SUBUpdateTime,
-			TOKEN: preferredSubGen.TOKEN,
 		},
 		reverseProxy: {
 			PROXYIP: reverseProxy.PROXYIP,
@@ -100,9 +96,9 @@ function cleanPathTemplateProtocol(config: { global?: string; standard?: string 
 function mergeConfigDefaults(defaultConfig, storedConfig) {
 	if (Array.isArray(defaultConfig)) return Array.isArray(storedConfig) ? storedConfig : [...defaultConfig];
 	if (defaultConfig && typeof defaultConfig === 'object') {
-		const merged = storedConfig && typeof storedConfig === 'object' && !Array.isArray(storedConfig) ? { ...storedConfig } : {};
+		const merged = {};
 		for (const [key, defaultValue] of Object.entries(defaultConfig)) {
-			merged[key] = mergeConfigDefaults(defaultValue, merged[key]);
+			merged[key] = mergeConfigDefaults(defaultValue, storedConfig?.[key]);
 		}
 		return merged;
 	}
@@ -184,9 +180,11 @@ async function normalizeRuntimeConfig(configJSON, env, host, hostname, userID, u
 	if (!configJSON.reverseProxy.pathTemplate.SSTP) configJSON.reverseProxy.pathTemplate.SSTP = { global: "sstp://" + PATH_PLACEHOLDER, standard: "sstp=" + PATH_PLACEHOLDER };
 
 	const proxyConfig = configJSON.reverseProxy.pathTemplate[configJSON.reverseProxy.SOCKS5.enabled?.toUpperCase()];
+	const configuredProxyIP = configJSON.reverseProxy[PROXYIP_KEY];
+	const effectiveProxyIP = configuredProxyIP === 'auto' ? DEFAULT_AUTO_PROXYIP : configuredProxyIP;
 	let pathProxyParam = '';
 	if (proxyConfig && configJSON.reverseProxy.SOCKS5.account) pathProxyParam = (configJSON.reverseProxy.SOCKS5.global ? proxyConfig.global : proxyConfig.standard).replace(PATH_PLACEHOLDER, configJSON.reverseProxy.SOCKS5.account);
-	else if (configJSON.reverseProxy[PROXYIP_KEY] !== 'auto') pathProxyParam = configJSON.reverseProxy.pathTemplate[PROXYIP_KEY].replace(PATH_PLACEHOLDER, configJSON.reverseProxy[PROXYIP_KEY]);
+	else if (effectiveProxyIP) pathProxyParam = configJSON.reverseProxy.pathTemplate[PROXYIP_KEY].replace(PATH_PLACEHOLDER, effectiveProxyIP);
 
 	let proxyQueryParam = '';
 	if (pathProxyParam.includes('?')) {
